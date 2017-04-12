@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title></title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/foundation/6.3.0/css/foundation.min.css">
+<style>
+
+</style>
+  </head>
+  <body>
+
+
+  <input id="files" accept="image/*" type="file" multiple>
+
+  <div id="current-image">
+    <img src="" >
+  </div>
+
+
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="https://use.fontawesome.com/eb154e6e77.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/what-input/4.0.6/what-input.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/foundation/6.3.0/js/foundation.min.js"></script>
+
+<script>
+
+$(document).foundation();
+
+var imageFiles = []
+var position = 0;
+$("#files").on('change', function() {
+  for(file in this.files) {
+    imageFiles.push(this.files[file].name);
+  }
+  loadImage();
+});
+
+function loadImage(){
+  $("#current-image img").attr("src", "/images/" + imageFiles[position])
+  d3.select("#current-image img").call(d3.zoom().on("zoom", zoomed));
+
+}
+
+</script>
+
+  </body>
+</html>
