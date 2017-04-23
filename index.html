@@ -9,16 +9,58 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/foundation/6.3.0/css/foundation.min.css">
 <style>
 
+html, body {
+  width: 100%;
+  height: 100%;
+}
+.svg-container {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.full-height {
+  height: 100%;
+}
+.gcp-list-item {
+  border-bottom: 1px solid #000;
+}
+
 </style>
   </head>
   <body>
 
 
-  <input id="files" accept="image/*" type="file" multiple>
+<div class="expanded row collapse full-height">
+  <div class="small-2 columns">
+    <h4>hello world</h4>
 
-  <div id="current-image">
-    <img src="" >
+    <label for="csv" class="button">GCP coordinates CSV</label>
+    <input id="csv" accept=".csv" type="file" class="show-for-sr">
+
+    <label for="files" class="button">Image files</label>
+    <input id="files" accept="image/*" type="file" class="show-for-sr" multiple>
+
+
+    <button class="button" onClick="resetZoom();">Reset zoom</button>
+    <div class="position-controls">
+      <button class="button position-change" onClick="previous(this);">Previous</button>
+      <p id="position-current"></p>
+      <button class="button position-change" onClick="next(this);">Next</button>
+    </div>
+
+    <div id="gcp-list">
+      <!-- ... -->
+    </div>
   </div>
+  <div class="small-10 columns full-height">
+    <div class="svg-container">
+      <!-- ... -->
+    </div>
+  </div>
+</div>
+
+
+
 
 
 
@@ -33,20 +75,272 @@
 
 $(document).foundation();
 
-var imageFiles = []
+var coords;
+var imageFiles = [];
+var gcps = [];
 var position = 0;
-$("#files").on('change', function() {
-  for(file in this.files) {
-    imageFiles.push(this.files[file].name);
+var theimg = new Image();
+var width, height;
+
+$("#csv").on('change', function(e) {
+  imageFiles = [];
+
+  function loadHandler(event) {
+    coords = d3.csvParse(event.target.result);
+    $("#csv").hide();
+
+
   }
-  loadImage();
+  function errorHandler(evt) {
+    if(evt.target.error.name == "NotReadableError") {
+      alert("Cannot read file !");
+    }
+  }
+
+  // Check for the various File API support.
+  if (window.FileReader) {
+      // FileReader are supported.
+      var reader = new FileReader();
+       // Read file into memory as UTF-8
+       reader.readAsText(e.target.files[0]);
+       // Handle errors load
+       reader.onload = loadHandler;
+       reader.onerror = errorHandler;
+  } else {
+      alert('FileReader are not supported in this browser.');
+  }
+
 });
 
+$("#files").on('change', function() {
+  imageFiles = [];
+  for(i=0; i < this.files.length; i++) {
+    imageFiles.push(this.files[i].name);
+  }
+  $("#files").hide();
+  sizeElements();
+});
+
+function freezeDelay(btn) {
+  $('.button.position-change').attr('disabled', true);
+  setTimeout(function(){ $('.button.position-change').attr('disabled', false); }, 1000);
+}
+
+function previous(btn) {
+  freezeDelay(btn);
+  position --;
+  if(position < 0){ position = 0; }
+  sizeElements();
+}
+
+function next(btn) {
+  freezeDelay(btn);
+  position ++;
+  if(position >= imageFiles.length){ position = imageFiles.length - 1; }
+  sizeElements();
+}
+
+function sizeElements() {
+  width = d3.select(".svg-container").style("width");
+  height = d3.select(".svg-container").style("height");
+  loadImage();
+}
+
+// need a loader gif or something.
+// the image jumps a lil when switching.
+
 function loadImage(){
-  $("#current-image img").attr("src", "/images/" + imageFiles[position])
-  d3.select("#current-image img").call(d3.zoom().on("zoom", zoomed));
+
+  resetZoom()
+  // display to user image # in list starting at 1 (not index position which starts at 0)
+  var imgNum = position + 1;
+  d3.select("#position-current").html(imgNum + " of " + imageFiles.length);
+  var imgPath = "images/" + imageFiles[position];
+
+  markers.selectAll("g").remove();
+  $.each(gcps, function(i, pt) {
+    if(pt.file === imageFiles[position]) {
+      drawMarker(pt);
+    }
+  });
+
+  // reset variables to store natural dimensions of image
+  var imgWidth = 0;
+  var imgHeight = 0;
+
+  // load the image into a non-visible element and get it's natural dimensions
+  // use these to adjust the css appropriately
+  theimg.onload = function(){
+    imgWidth = theimg.naturalWidth;
+    imgHeight = theimg.naturalHeight;
+    // this breaks if the pic is landscape
+    // but at 100% width its height doesn't fit
+    // within the height of the parent
+    d3.select(".currentImg")
+      .style("width", function() {
+         if(imgWidth < imgHeight) {
+           return "auto"
+         } else {
+           return "100%"
+         }
+       })
+       .style("height", function() {
+         if(imgWidth < imgHeight) {
+          //  console.log(imgWidth, imgHeight)
+           return "100%"
+         } else {
+           return "auto"
+         }
+       })
+  };
+  theimg.src = imgPath;
+
+  d3.select(".svg-container svg")
+    .attr("width", width)
+    .attr("height", height)
+  view.select(".currentImg").attr("xlink:href",imgPath)
 
 }
+
+
+function listGcps(){
+  var listed = d3.select("#gcp-list").selectAll(".gcp-list-item")
+    .data(gcps, function(d) { return d.gcpLog; })
+
+  // EXIT
+  listed.exit().remove();
+
+  // UPDATE
+  // ...
+
+  // ENTER
+  listed.enter().append("div")
+    .attr("class", "gcp-list-item")
+    .html(function(d) {
+      return "gcpLog: " + d.gcpLog + "<br> file: " + d.file + "<br> xy: " + d.xy[0] + ", " + d.xy[1] + "<br> gcp id: " + d.gcpid;
+    })
+
+  d3.select("#gcp-list").selectAll(".gcp-list-item")
+    .sort(function(a, b) { return d3.descending(a.gcpLog, b.gcpLog); });
+
+
+
+}
+
+
+var zoom = d3.zoom()
+ .on("zoom", zoomed);
+
+function zoomed() {
+  view.attr("transform", d3.event.transform);
+}
+
+var gcpLogCount = 0;
+
+function saveMarker(imgFile, xy) {
+  var newPt = {
+    gcpLog: gcpLogCount,
+    gcpid: null,
+    file: imgFile,
+    xy: xy
+  };
+  gcps.push(newPt);
+  gcpLogCount++;
+  drawMarker(newPt)
+  listGcps();
+}
+
+function deleteMarker(gcpLog) {
+  $.each(gcps, function(index, pt) {
+    // console.log("gcpLog: ", gcpLog)
+    // console.log("index: ", index)
+    // console.log("pt: ", pt)
+    // this sometimes logs... `Uncaught TypeError: Cannot read property 'gcpLog' of undefined`
+    if(parseInt(gcpLog) === pt['gcpLog']) {
+      gcps.splice(index, 1);
+    }
+  });
+  listGcps();
+}
+
+function drawMarker(pt) {
+  var x = pt.xy[0];
+  var y = pt.xy[1];
+  var crosshairs = markers.append("g").attr("data-gcpLog", pt.gcpLog);
+  crosshairs.on('click', function(){
+      deleteMarker(d3.select(this).attr("data-gcpLog"));
+      d3.select(this).remove();
+    })
+  var s = '#ed1b2e';
+  var so = 1;
+  var sw = '1px';
+  var sl = 8
+  crosshairs.append('line')
+    .attr('x1',x-(sl/2))
+    .attr('y1',y)
+    .attr('x2',x+(sl/2))
+    .attr('y2',y)
+    .style('stroke', s)
+    .style('stroke-opacity', so)
+    .style('stroke-width', sw);
+  crosshairs.append('line')
+    .attr('x1',x)
+    .attr('y1',y-(sl/2))
+    .attr('x2',x)
+    .attr('y2',y+(sl/2))
+    .style('stroke', s)
+    .style('stroke-opacity', so)
+    .style('stroke-width', sw);
+  crosshairs.append('circle')
+    .attr("cx", x)
+    .attr("cy", y)
+    .attr("r", 8)
+    .style("fill", "transparent")
+    .style('cursor', "pointer")
+    .style('stroke', s)
+    .style('stroke-opacity', so)
+    .style('stroke-width', sw);
+}
+
+function clicked(d, i) {
+  if (d3.event.defaultPrevented) return; // zoomed
+  // console.log(imageFiles[position])
+  var xy = [Number((d3.mouse(this)[0]).toFixed(0)), Number((d3.mouse(this)[1]).toFixed(0))];
+
+  // a given GCP will only show up in a given photo one time.
+  // get user input for GCP # here and use it to delete the right record when removing
+  saveMarker(imageFiles[position], xy)
+
+}
+
+function nozoom() {
+  d3.event.preventDefault();
+}
+
+function resetZoom() {
+  var t = d3.zoomIdentity.translate(0, 0).scale(1);
+  view.call(zoom.transform, t);
+}
+
+var svg = d3.select(".svg-container")
+    .on("touchstart", nozoom)
+    .on("touchmove", nozoom)
+   .append("svg")
+
+var view = svg.append("g")
+ .attr("class", "view")
+ .call(zoom);
+
+
+
+view.append("svg:image")
+  .attr('x',0)
+  .attr('y',0)
+  .classed("currentImg", true)
+  .attr("id", "myimg")
+  .on("click", clicked)
+
+var markers = view.append("g").classed("markers", true);
 
 </script>
 
